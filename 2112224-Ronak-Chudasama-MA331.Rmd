@@ -1,0 +1,253 @@
+---
+title: "MA331-Coursework"
+subtitle: "Text analytics of the TED talks by Dan Gilbert and John Hodgman"
+author: "2112224-Ronak-Chudasama"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE)  
+
+# Loading the packages
+
+library(dsEssex)
+library(tidyverse)
+library(tidytext)
+library(ggrepel)
+library(DT)
+library(kableExtra)
+
+# Loading the 'ted_talks' data
+data(ted_talks)
+```
+
+# Introduction
+
+Aim of this report is to compare word frequencies and perform sentiment analyses on the transcripts of two Ted talkers. Following are the details of Ted talkers I am assigned to:
+
+#### 1.Dan Gilbert : 
+ Dan Gilbert is Harvard Psychologist also known as happiness expert[1]. His 2 talks are included in the data sets:
+ 
+
+*The psychology of your future self* - This talk was given in March 2014.It is about how we wrongly assume our future self based on our present self.
+
+*The surprising science of happiness* - It is talk from Feb 2004.It speaks about concept of how our psychological immune system react to term happiness.
+
+#### 2.John Hodgman :
+  John Hodgman is a humourist, geek celebrity, former professional literary agent. He is also a write and known as an expert on all world knowledge[1].2 talks of his are included in data set
+
+*Aliens, love -- where are they?* - It was given in Feb 2008. It talks about topics like Alien, physics and then how it was related to his love life.
+
+*Design, explained.* - It was given in Mar 2012. He explains design of 3 modern objects.
+
+
+```{r Intro}
+
+# Filter the two talk data for analyses
+
+my_ted_talks <- ted_talks %>% filter(speaker %in% c("John Hodgman","Dan Gilbert"))
+
+```
+
+
+# Methods
+
+### 1. Description:
+Data set has 4 rows (4 transcript of authors) and 5 columns(talk_id, headline, text, speaker and views). .
+
+### 2. Cleaning data
+As task is to deal with words, numbers need to be deleted .I have deleted the numbers using *stringr* package.
+
+### 3. Extracting words
+Then I have used *unnest_tokens* function to extract words from the text.
+
+```{r extract, echo=FALSE,warning=FALSE}
+#dim(my_ted_talks)
+#str(my_ted_talks)
+#remove numbers
+my_ted_talks$text  <- my_ted_talks$text  %>% str_replace_all("[:digit:]","")
+
+#extracting words.
+ted_words <- my_ted_talks %>% unnest_tokens(word, text)
+
+#display top 5 data into kable format
+kable(head(ted_words,5),align = "l")%>% kable_styling(latex_options =c("HOLD_position"))
+
+```
+As seen in the above table, these are the top 5 words extracted from the test.
+
+### 4.Identifying top words
+Here first I am finding all top words from the transcripts. Table below shows top 6 words used in talk. As expected these are the stop words because we normally use more stop words in our day to day life. So these needs to be filtered. I am using *get_stopwords()* function to filter these stops words.
+```{r words,echo=FALSE,warning=FALSE}
+
+# 4.Identifying top words
+topallwords <- ted_words %>% count(word, sort = TRUE)
+
+#display top 6 data into kable format
+kable(head(topallwords,6),align = "l")%>% kable_styling(latex_options =c("HOLD_position"))
+
+#Removing stop words
+
+#get_stopwords()- function to get all stopwords
+
+topwords <- ted_words %>% anti_join(get_stopwords()) %>% count(word,sort=TRUE)     
+
+#display top 6 data into kable format
+kable(head(topwords,6),align = "l")%>% kable_styling(latex_options =c("HOLD_position"))
+
+```
+After filtering stop words, above table shows top 6 words used in talks. 
+
+   
+
+### 4.Comparing speaker's vocabularies
+
+Next task is to compare vocabularies of both speakers.
+```{r speaker, echo=FALSE,warning=FALSE}
+
+#4. Compare speaker's vocabularies
+
+#remove stop words and then count and group by word , filter by total count more than 10
+comp <- ted_words %>% anti_join(get_stopwords()) %>% count(speaker, word) %>%         
+  group_by(word) %>%  filter(sum(n) > 10) %>% ungroup() %>%         
+  pivot_wider(names_from = "speaker", values_from = "n", values_fill = 0) # divide by speaker names
+
+#displaying top 6 words
+
+kable(head(comp,6),align = "l")%>% kable_styling(latex_options =c("HOLD_position"))
+```
+So these are the top 6 words used in talks by speakers Dan Gilbert and John Hodgman. Dan Gilbert used mostly words like change, can and better frequently whereas John Hodgman said words like back and come more often.
+
+### 5. Sentiment Analysis
+
+Sentiment analysis is used to assign sentiment to each word. This sentiments are anger, fear or  surprise.It helps to understand emotions for machine.
+In this project, I have used nrc lexicon from the *textdata* package.
+
+1. *nrc lexicon*:
+   It is used to compare the frequencies of each emotions present per talk. Confidence interval for each sentiment is calculated later for both talks using log(OR) Where OR is the value of Odds Ratio.[5] 
+
+```{r sent, echo=FALSE}
+
+#using nrc package to perform sentiment analysis
+senti <- ted_words %>%
+  inner_join(get_sentiments("nrc"), by = "word") %>%
+  count(speaker, sentiment)%>%
+  pivot_wider(names_from = "speaker", values_from = "n", values_fill = 0)
+
+#displaying top 6 sentiments and count of words in it per speaker
+kable(head(senti,6),align = "l")%>% kable_styling(latex_options =c("HOLD_position"))
+
+
+```
+Above table displays word count per sentiment used in both talks. Dan Gilbert has used more words in his talk. Emotions like anticipation, joy, negative are used more often in talks.
+
+# Results
+
+
+### 1.Top words Visualization
+Graph shows top 6 words used in the talks having *one* has mostly used word.
+```{r Vis, echo=FALSE,fig.height=3,fig.width=7,warning=FALSE}
+#Visualize top words
+
+# removing stop words and selecting top 6
+ted_words %>% anti_join(get_stopwords()) %>% count(word, sort = TRUE) %>% slice_max(n, n = 6) %>%            mutate(word = reorder(word, n)) %>% ggplot(aes(n, word,fill="red")) + geom_col()    +xlab("Word count") + ylab("Most used word") 
+
+
+```
+
+
+## 2.Vocabulary Comparison Visualization
+```{r viz2, echo=FALSE,fig.height=3,fig.width=7,warning=FALSE}
+# Visualize vocabulary comparison
+
+#remove stop words, count and group by word , filter by total count more than 10
+#then divide by speakers
+ted_words %>% anti_join(get_stopwords()) %>%
+  count(speaker, word) %>% group_by(word) %>% filter(sum(n) > 10) %>% ungroup() %>%
+  pivot_wider(names_from = "speaker", values_from = "n", values_fill = 0) %>%
+  ggplot(aes(`Dan Gilbert`, `John Hodgman`)) +
+  geom_abline(color = "blue", size = 0.7, lty = 2) +
+  #  for  plotting
+  geom_text_repel(aes(label = word), max.overlaps = 25) +theme_bw()
+
+
+
+```
+Above graph shows representation of most words used by both speakers. There are words like new, first, said which are equally used by both of them.
+
+### 3.Sentiment Analysis Visualization
+```{r senti1, echo=FALSE ,fig.height=3,fig.width=7,warning=FALSE}
+
+# using nrc for sentiment analysis,dividing by speaker names
+#calculating odds raio
+ted_words %>%
+  inner_join(get_sentiments("nrc"), by = "word") %>%
+  count(speaker, sentiment) %>%
+  pivot_wider(names_from = "speaker", values_from = "n", values_fill = 0) %>%
+  mutate(OR = dsEssex::compute_OR(`Dan Gilbert`, `John Hodgman` ,correction = FALSE), log_OR = log(OR), sentiment = reorder(sentiment, log_OR)) %>%
+  ggplot(aes(sentiment, log_OR, fill = log_OR < 0)) +
+  geom_col(show.legend = FALSE) +
+  ylab("Log odds ratio") + ggtitle("The association between sentiments and speakers") +
+  coord_flip() + 
+  scale_fill_manual(name = "", values = c("#6e040d", "#073b52"))
+```
+As seen in graph above, Anger and  trust mostly associated with the talks given by *John Hodgman* and *Dan Gilbert* gave talks including negative, fear, positive emotions.
+
+```{r senti2, echo=FALSE ,fig.height=3,fig.width=7,warning=FALSE}
+
+#remove stop words, count it and divide by speaker names
+ss <- ted_words %>% anti_join(get_stopwords()) %>%                                
+      count(word,speaker) %>% group_by(word) %>%  ungroup() %>%               
+      pivot_wider(names_from = "speaker", values_from = "n", values_fill = 0)
+
+#arranging words by decreasing odds ratio
+senti_words <- ss %>%
+               mutate(OR = dsEssex::compute_OR(`Dan Gilbert`, `John Hodgman` ,correction = FALSE),                log_OR = log(OR))  %>% arrange(desc(OR))
+
+#selecting these 2 emotions to display
+asentiment <- c("anticipation", "joy")
+
+
+# using nrc for sentiment analysis,dividing by speaker names
+#calculating odds and plotting for "anticipation" and "joy"
+senti_words %>% inner_join(get_sentiments("nrc"), by = "word") %>% mutate(log_OR = log(OR)) %>%
+  filter(`Dan Gilbert`+ `John Hodgman` > 5 & abs(log_OR) > -0.40 & sentiment %in% asentiment) %>%   mutate(word = reorder(word, log_OR), sentiment = factor(sentiment, levels = asentiment, ordered = TRUE)) %>%
+  ggplot(aes(word, log_OR, fill = log_OR < 0)) + geom_col(show.legend = FALSE) +
+  facet_wrap(~ sentiment, scales = "free_x", nrow = 1) +
+  labs(y = "Log odds ratio") + ggtitle("The association between words and speakers") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", size = 10),)+
+  scale_fill_manual(values = c("#741c8a", "#3f9946"))
+
+```
+
+Above graph has shown association between sentiments like anticipation and joy and speakers.
+In case of anticipation, happy, experiment, happiness words are mostly linked in the talks of *John Hodgman* Whereas *Dan Gilbert* used words like laughter and time more.
+*John Hodgman* used words like good, favorite, kind more often.
+
+# Discussion :
+
+    Important challenge I faced working on this task is that there are 2 different authors with having transcripts of 4 different topics and length. 
+   Following is the summary of this project:
+
+     * In the transcript of the Ted speaker Dan Gilbert laughter word came a lot which tells that         his ted talks are happy or positive or may be sarcastic.
+    
+     * Ted speaker John Hodgman has used mixture of emotions like love, happy, anger in his talks.
+  
+     * Both ted talks had mixture of all emotions.
+    
+*Limitations:*
+     
+     As ted talks are filled with sarcasm, I think this will be the biggest limitation that project could not identify sarcasm involved in the talks. This can be worked on in future study.
+
+# References :
+
+[1]     - *https://www.ted.com/*
+
+[2]     - *http://data-science.essex.ac.uk:3838/MA331/W7/*
+
+[3]     - *http://data-science.essex.ac.uk:3838/MA331/W8/*
+
+[4]     - *https://monkeylearn.com/sentiment-analysis/*
+
+[5]     - *http://data-science.essex.ac.uk:3838/MA331/W9/*
